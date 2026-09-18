@@ -424,6 +424,37 @@ describe("matchErrorPartial", () => {
     expectTypeOf(dataLast).toEqualTypeOf<string | ErrorB>();
   });
 
+  it("passes the full error union to onUnhandled with explicit E and R", () => {
+    const result = Result.err<void, ErrorA | ErrorB>(new ErrorA());
+    const handlers = { ErrorA: () => "A" };
+    const onUnhandled = (e: ErrorA | ErrorB) => e._tag;
+
+    matchErrorPartial<ErrorA | ErrorB, string>(result.error, handlers, (e) => {
+      expectTypeOf(e).toEqualTypeOf<ErrorA | ErrorB>();
+      return e._tag;
+    });
+    matchErrorPartial<ErrorA | ErrorB, string>(handlers, (e) => {
+      expectTypeOf(e).toEqualTypeOf<ErrorA | ErrorB>();
+      return e._tag;
+    });
+    matchErrorPartial<ErrorA | ErrorB, string>(result.error, handlers, onUnhandled);
+    matchErrorPartial<ErrorA | ErrorB, string>(handlers, onUnhandled);
+  });
+
+  it("excludes handled errors from onUnhandled with explicit E, R, and H", () => {
+    const result = Result.err<void, ErrorA | ErrorB>(new ErrorA());
+    const handlers = { ErrorA: () => "A" };
+
+    matchErrorPartial<ErrorA | ErrorB, string, typeof handlers>(result.error, handlers, (e) => {
+      expectTypeOf(e).toEqualTypeOf<ErrorB>();
+      return e._tag;
+    });
+    matchErrorPartial<ErrorA | ErrorB, string, typeof handlers>(handlers, (e) => {
+      expectTypeOf(e).toEqualTypeOf<ErrorB>();
+      return e._tag;
+    });
+  });
+
   it("infers only the fallback return for an empty handler map", () => {
     const result = Result.err<void, ErrorA | ErrorB>(new ErrorA());
     const outcome = matchErrorPartial(result.error, {}, () => "fallback" as const);

@@ -561,18 +561,14 @@ describe("TaggedError", () => {
       expect(matchOneHandler(error)).toBe("other: NetworkError");
     });
 
-    it("data-last form narrows fallback type", () => {
-      // Data-last: only need <E, R> - H is inferred from inline handlers object
+    it("data-last form with explicit E, R passes the full union to the fallback", () => {
+      // TypeScript cannot infer H once E and R are explicit, so the fallback receives all of E.
       const matcher = matchErrorPartial<AppError, string>(
         {
           NotFoundError: (e) => `not found: ${e.id}`,
           ValidationError: (e) => `validation: ${e.field}`,
         },
-        (e) => {
-          // Only NetworkError remains - type is properly narrowed
-          const _check: NetworkError = e;
-          return `network: ${_check.url}`;
-        },
+        (e) => (e._tag === "NetworkError" ? `network: ${e.url}` : `other: ${e._tag}`),
       );
 
       const error: AppError = new NetworkError({ url: "https://api.test.com", message: "failed" });
