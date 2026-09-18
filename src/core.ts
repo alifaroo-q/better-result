@@ -107,7 +107,8 @@ export type TapBothAsyncErrHandlers<E> = {
   err: (e: E) => Promise<void>;
 };
 
-export type Matcher<A, E, T, U = T> = {
+/** Ok and err handlers for Result match; each branch may return its own type. */
+export type MatchResultHandlers<A, E, T, U = T> = {
   ok: (a: A) => T;
   err: (e: E) => U;
 };
@@ -379,12 +380,12 @@ export class Ok<A, E = never> {
    * @example
    * ok(2).match({ ok: x => x * 2, err: () => 0 }) // 4
    */
-  match<T, U = T>(this: Ok<A, E>, handlers: Matcher<A, never, T, U>): T | U;
+  match<T, U = T>(this: Ok<A, E>, handlers: MatchResultHandlers<A, never, T, U>): T | U;
   match<T, R extends AnyResult = Result<A, E>, U = T>(
     this: R,
-    handlers: Matcher<InferOk<R>, InferErr<R>, T, U>,
+    handlers: MatchResultHandlers<InferOk<R>, InferErr<R>, T, U>,
   ): T | U;
-  match<T>(handlers: Matcher<A, never, T, unknown>): T {
+  match<T>(handlers: MatchResultHandlers<A, never, T, unknown>): T {
     return tryOrPanic(() => handlers.ok(this.value), "match ok handler threw");
   }
 
@@ -731,12 +732,12 @@ export class Err<T, E> {
    * @example
    * err("fail").match({ ok: x => x, err: e => e.length }) // 4
    */
-  match<U, V = U>(this: Err<T, E>, handlers: Matcher<never, E, U, V>): U | V;
+  match<U, V = U>(this: Err<T, E>, handlers: MatchResultHandlers<never, E, U, V>): U | V;
   match<U, R extends AnyResult = Result<T, E>, V = U>(
     this: R,
-    handlers: Matcher<InferOk<R>, InferErr<R>, U, V>,
+    handlers: MatchResultHandlers<InferOk<R>, InferErr<R>, U, V>,
   ): U | V;
-  match<V>(handlers: Matcher<never, E, unknown, V>): V {
+  match<V>(handlers: MatchResultHandlers<never, E, unknown, V>): V {
     return tryOrPanic(() => handlers.err(this.error), "match err handler threw");
   }
 
