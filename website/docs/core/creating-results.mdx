@@ -47,6 +47,8 @@ const parsed = Result.try({
 // Result<unknown, InvalidJson>
 ```
 
+To map third-party `Error` classes by type, use [`TaggedError.adapt`](/errors/tagged-errors#adapt-errors-from-other-packages).
+
 The callback receives `{ attempt }`. Synchronous retry runs immediately and is bounded by `times`:
 
 ```ts

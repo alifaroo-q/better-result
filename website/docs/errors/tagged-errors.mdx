@@ -77,6 +77,33 @@ new ParseFailed({ input, cause, message: "Could not parse input" });
 
 Native `Error.cause` is populated. `toJSON()` serializes an `Error` cause to its name, message, and stack.
 
+## Adapt errors from other packages
+
+Third-party packages throw their own `Error` subclasses, which cannot extend `TaggedError`. `TaggedError.adapt` builds a `catch` handler that maps them to your tagged errors:
+
+```ts
+import { UserMissing, RateLimited, api } from "user-sdk";
+
+class UserNotFound extends TaggedError("UserNotFound")<{ cause: unknown }> {}
+
+class UserApiRateLimited extends TaggedError("UserApiRateLimited")<{
+  message: string;
+  cause: RateLimited; // typed as the source class
+}> {}
+
+const user = await Result.tryPromise({
+  try: () => api.getUser(userId),
+  catch: TaggedError.adapt([UserMissing, UserNotFound], [RateLimited, UserApiRateLimited]),
+});
+// Result<User, UserNotFound | UserApiRateLimited | UnhandledException>
+```
+
+- Each target class is built with `{ cause, message }`. The original error is kept as `cause`, its message is copied, and its stack is appended.
+- A target may type `cause` as its source class, as `UserApiRateLimited` does. After narrowing, `error.cause` then has that type. A pair whose `cause` type does not match its source does not compile.
+- The first matching pair wins, so list subclasses before their parents.
+- Anything that matches no pair becomes `UnhandledException`, the same as `Result.try` without a `catch`.
+- Target classes that need other properties do not compile. Write a normal `catch` handler for those.
+
 ## Guards
 
 ```ts
@@ -112,6 +139,7 @@ const result = Result.gen(function* () {
 - `TaggedErrorClass<Tag>` describes the factory's generic class.
 - `TaggedErrorInstance<Tag, Props>` describes an instance structurally.
 - `AnyTaggedError` describes any tagged error with `toJSON()`.
+- `ErrorAdapter` describes one `[from, to]` pair for `TaggedError.adapt`.
 
 <Callout type="note" title="Current class syntax">
   The class extends `TaggedError("Tag")<Props>` directly. There is no trailing `()` after the property type.

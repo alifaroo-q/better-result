@@ -59,6 +59,17 @@ Use these dispositions:
 
 A rare operational failure remains recoverable when the caller has a meaningful response. Make panic messages state the invariant, observed state, and operation in progress. Preserve causes and let panics reach the outermost telemetry or crash boundary.
 
+When a dependency throws documented `Error` subclasses and the boundary error needs only `cause` and `message`, use `TaggedError.adapt` as the `catch` handler instead of hand-written `instanceof` chains:
+
+```ts
+Result.tryPromise({
+  try: () => sdk.getCustomer(customerId),
+  catch: TaggedError.adapt([SdkNotFound, CustomerNotFound], [SdkTimeout, CustomerStoreTimeout]),
+});
+```
+
+It copies the dependency's message and falls back to `UnhandledException`. When the boundary error needs domain context (identifiers, provider, retry facts) or its own message, write the `catch` handler by hand.
+
 Record every `UnhandledException` fallback in the adoption report or implementation summary so its required investigation remains visible.
 
 ## Design for handling

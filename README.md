@@ -179,6 +179,34 @@ const findCart = (cartId: string): ResultType<Cart, CartNotFound> => {
 
 The error type is part of the function's contract. A caller must propagate, recover from, or handle `CartNotFound`.
 
+### Adapt errors from other packages
+
+Third-party packages throw their own `Error` subclasses, which cannot extend `TaggedError`. `TaggedError.adapt` builds a `catch` handler that maps them to your tagged errors:
+
+```ts
+import { CardDeclined, RateLimited, payments } from "payment-sdk";
+
+class CardRejected extends TaggedError("CardRejected")<{ cause: unknown }> {}
+
+class PaymentRateLimited extends TaggedError("PaymentRateLimited")<{
+  message: string;
+  cause: RateLimited; // typed as the source class
+}> {}
+
+const charge = (amount: number) =>
+  Result.tryPromise({
+    try: () => payments.charge(amount),
+    catch: TaggedError.adapt([CardDeclined, CardRejected], [RateLimited, PaymentRateLimited]),
+  });
+// Promise<Result<Receipt, CardRejected | PaymentRateLimited | UnhandledException>>
+```
+
+- Each target class is built with `{ cause, message }`. The original error is kept as `cause`, its message is copied, and its stack is appended.
+- A target may type `cause` as its source class, as `PaymentRateLimited` does. After narrowing, `error.cause` then has that type. A pair whose `cause` type does not match its source does not compile.
+- The first matching pair wins, so list subclasses before their parents.
+- Anything that matches no pair becomes `UnhandledException`, the same as `Result.try` without a `catch`.
+- Target classes that need other properties do not compile. Write a normal `catch` handler for those.
+
 ### Compose linearly with `Result.gen`
 
 Assume the application also provides these Result-returning operations:
@@ -611,7 +639,7 @@ The [complete API reference](https://better-result.dev/reference/result) is the 
 | Transform and compose  | `map`, `mapError`, `andThen`, `andThenAsync`, `tryRecover`, `tryRecoverAsync`, `Result.gen`, `Result.await` |
 | Observe                | `tap`, `tapAsync`, `tapError`, `tapErrorAsync`, `tapBoth`, `tapBothAsync`                                   |
 | Collect                | `Result.all`, `Result.allAsync`, `Result.partition`, `Result.partitionAsync`, `Result.flatten`              |
-| Typed errors           | `TaggedError`, `matchError`, `matchErrorPartial`, `isTaggedError`                                           |
+| Typed errors           | `TaggedError`, `TaggedError.adapt`, `matchError`, `matchErrorPartial`, `isTaggedError`                      |
 | Boundaries and defects | `Result.codec`, `serializeUnsafe`, `deserializeUnsafe`, `Panic`, `panic`, `isPanic`, `UnhandledException`   |
 
 ### Public types
@@ -627,6 +655,7 @@ The [complete API reference](https://better-result.dev/reference/result) is the 
 | `SerializedResult<T, E>`            | Plain-object Result envelope                  |
 | `StandardSchemaV1`                  | Standard Schema-compatible validator contract |
 | `AnyTaggedError`                    | Any better-result tagged error instance       |
+| `ErrorAdapter`                      | `[from, to]` pair for `TaggedError.adapt`     |
 
 See [Ok and Err](https://better-result.dev/reference/ok-and-err), [exported types](https://better-result.dev/reference/exported-types), and [error APIs](https://better-result.dev/reference/errors) for detailed contracts.
 

@@ -16,6 +16,23 @@ class NotFound extends TaggedError("NotFound")<{
 
 Instances expose `_tag`, declared properties, native Error fields, `toJSON()`, exhaustive `.match(handlers)`, and generator iterator behavior. Concrete classes expose `.is(value)`.
 
+## `TaggedError.adapt(...adapters)`
+
+Builds a `catch` handler for `Result.try` and `Result.tryPromise` from `[from, to]` pairs:
+
+```ts
+TaggedError.adapt([ExternalNotFound, NotFound], [ExternalTimeout, Timeout]);
+// (cause: unknown) => NotFound | Timeout | UnhandledException
+```
+
+| Rule         | Behavior                                                                                                            |
+| ------------ | ------------------------------------------------------------------------------------------------------------------- |
+| Match        | `cause instanceof from`; the first matching pair wins                                                               |
+| Construction | `new to({ cause, message: cause.message })`                                                                         |
+| No match     | `new UnhandledException({ cause })`, including non-Error thrown values                                              |
+| `from`       | any `Error` class                                                                                                   |
+| `to`         | a `TaggedError` class whose props need no more than `cause` and `message`; `cause` may be typed as the `from` class |
+
 ## Guards
 
 | API                       | Narrows to            |
@@ -45,7 +62,7 @@ The `match` property name is reserved on `TaggedError` payloads; TypeScript also
 
 ### `UnhandledException`
 
-Returned by `Result.try` and `Result.tryPromise` when no custom catch translator is supplied.
+Returned by `Result.try` and `Result.tryPromise` when no custom catch translator is supplied, and by `TaggedError.adapt` when no pair matches.
 
 | Property  | Type                   |
 | --------- | ---------------------- |
