@@ -35,4 +35,5 @@ export type {
   ResultCodecIssue,
   TaggedErrorInstance,
   TaggedErrorClass,
+  ErrorAdapter,
 } from "./error";

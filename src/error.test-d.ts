@@ -1,5 +1,13 @@
 import { describe, expectTypeOf, it } from "vitest";
-import { type Err, matchError, matchErrorPartial, type Ok, Result, TaggedError } from "./index";
+import {
+  type Err,
+  matchError,
+  matchErrorPartial,
+  type Ok,
+  Result,
+  TaggedError,
+  UnhandledException,
+} from "./index";
 
 class ErrorA extends TaggedError("ErrorA")<{}> {}
 class ErrorB extends TaggedError("ErrorB")<{}> {}
@@ -541,5 +549,116 @@ describe("matchErrorPartial", () => {
     );
 
     expectTypeOf(recovered).toEqualTypeOf<Result<string | ErrorC, ErrorA | ErrorB>>();
+  });
+});
+
+describe("TaggedError.adapt", () => {
+  class ExternalNotFound extends Error {}
+  class ExternalRateLimited extends Error {
+    constructor(readonly retryAfter: number) {
+      super();
+    }
+  }
+
+  class UserNotFoundError extends TaggedError("UserNotFoundError")<{ cause: unknown }> {}
+  class RateLimitError extends TaggedError("RateLimitError")<{
+    message: string;
+    cause: unknown;
+  }> {}
+  class EmptyPropsError extends TaggedError("EmptyPropsError")<{}> {}
+  class RetryError extends TaggedError("RetryError")<{ cause: unknown; retryAfter: number }> {}
+
+  it("returns the union of target errors and UnhandledException", () => {
+    const adapt = TaggedError.adapt(
+      [ExternalNotFound, UserNotFoundError],
+      [ExternalRateLimited, RateLimitError],
+    );
+
+    expectTypeOf(adapt).toEqualTypeOf<
+      (cause: unknown) => UserNotFoundError | RateLimitError | UnhandledException
+    >();
+  });
+
+  it("returns only UnhandledException with no adapters", () => {
+    expectTypeOf(TaggedError.adapt()).returns.toEqualTypeOf<UnhandledException>();
+  });
+
+  it("accepts target classes with empty props", () => {
+    expectTypeOf(TaggedError.adapt([ExternalNotFound, EmptyPropsError])).returns.toEqualTypeOf<
+      EmptyPropsError | UnhandledException
+    >();
+  });
+
+  it("infers the Result error union from tryPromise", async () => {
+    const result = await Result.tryPromise({
+      try: () => Promise.resolve(1),
+      catch: TaggedError.adapt([ExternalNotFound, UserNotFoundError]),
+    });
+
+    expectTypeOf(result).toEqualTypeOf<
+      | Ok<number, UserNotFoundError | UnhandledException>
+      | Err<number, UserNotFoundError | UnhandledException>
+    >();
+  });
+
+  it("accepts a target whose cause is typed as the source class", () => {
+    class TypedCause extends TaggedError("TypedCause")<{ cause: ExternalRateLimited }> {}
+    const error = TaggedError.adapt([ExternalRateLimited, TypedCause])(new ExternalRateLimited(1));
+
+    if (TypedCause.is(error)) {
+      expectTypeOf(error.cause).toEqualTypeOf<ExternalRateLimited>();
+      expectTypeOf(error.cause.retryAfter).toEqualTypeOf<number>();
+    }
+  });
+
+  it("rejects a target whose cause type does not match its source", () => {
+    class TypedCause extends TaggedError("TypedCause")<{ cause: ExternalRateLimited }> {}
+    // @ts-expect-error - ExternalNotFound is not an ExternalRateLimited
+    TaggedError.adapt([ExternalNotFound, TypedCause]);
+  });
+
+  it("checks each pair against its own source", () => {
+    class TypedCause extends TaggedError("TypedCause")<{ cause: ExternalRateLimited }> {}
+    expectTypeOf(
+      TaggedError.adapt([ExternalNotFound, UserNotFoundError], [ExternalRateLimited, TypedCause]),
+    ).returns.toEqualTypeOf<UserNotFoundError | TypedCause | UnhandledException>();
+
+    // @ts-expect-error - second pair swaps the sources
+    TaggedError.adapt([ExternalRateLimited, UserNotFoundError], [ExternalNotFound, TypedCause]);
+  });
+
+  it("accepts abstract source classes", () => {
+    abstract class AbstractExternal extends Error {}
+    expectTypeOf(TaggedError.adapt([AbstractExternal, UserNotFoundError])).returns.toEqualTypeOf<
+      UserNotFoundError | UnhandledException
+    >();
+  });
+
+  it("accepts pairs declared with as const", () => {
+    const pair = [ExternalNotFound, UserNotFoundError] as const;
+    expectTypeOf(TaggedError.adapt(pair)).returns.toEqualTypeOf<
+      UserNotFoundError | UnhandledException
+    >();
+  });
+
+  it("rejects target classes with extra required props", () => {
+    // @ts-expect-error - RetryError needs retryAfter, adapt only passes cause and message
+    TaggedError.adapt([ExternalRateLimited, RetryError]);
+  });
+
+  it("rejects a source that is not an Error class", () => {
+    class NotAnError {}
+    // @ts-expect-error - source must construct an Error
+    TaggedError.adapt([NotAnError, UserNotFoundError]);
+  });
+
+  it("rejects a target that is not a TaggedError class", () => {
+    // @ts-expect-error - target must construct a TaggedError
+    TaggedError.adapt([ExternalNotFound, ExternalRateLimited]);
+  });
+
+  it("rejects a bare pair that is not a tuple", () => {
+    // @ts-expect-error - each adapter must be a [from, to] pair
+    TaggedError.adapt(ExternalNotFound, UserNotFoundError);
   });
 });

@@ -397,6 +397,52 @@ export class UnhandledException extends TaggedError("UnhandledException")<{
   }
 }
 
+/** Any Error class, including abstract ones. */
+type ErrorClass = abstract new (...args: never[]) => Error;
+
+/**
+ * Maps an external Error class to a TaggedError class built from `{ cause, message }`.
+ * `cause` is typed as an instance of `From`.
+ */
+export type ErrorAdapter<From extends ErrorClass = ErrorClass> = readonly [
+  from: From,
+  to: new (args: { cause: InstanceType<From>; message: string }) => AnyTaggedError,
+];
+
+/** Loose pair shape used to infer adapters before each pair is checked. */
+type AnyErrorAdapter = readonly [from: ErrorClass, to: new (args: never) => AnyTaggedError];
+
+/** Checks each `[from, to]` pair against its own `from` class. */
+type CheckedAdapters<A extends readonly unknown[]> = {
+  [K in keyof A]: A[K] extends readonly [infer From extends ErrorClass, unknown]
+    ? ErrorAdapter<From>
+    : ErrorAdapter;
+};
+
+const adaptErrors =
+  <const A extends readonly AnyErrorAdapter[]>(...adapters: A & CheckedAdapters<A>) =>
+  (cause: unknown): InstanceType<A[number][1]> | UnhandledException => {
+    for (const [from, to] of adapters) {
+      if (cause instanceof from) {
+        // SAFETY: `to` is one of A[number][1]
+        return new to({ cause, message: cause.message }) as InstanceType<A[number][1]>;
+      }
+    }
+    return new UnhandledException({ cause });
+  };
+
+/**
+ * Builds a catch handler that turns external errors into TaggedErrors.
+ * First matching adapter wins; anything else becomes UnhandledException.
+ *
+ * @example
+ * Result.tryPromise({
+ *   try: () => sdk.getUser(id),
+ *   catch: TaggedError.adapt([UserNotFound, UserNotFoundError]),
+ * });
+ */
+TaggedError.adapt = adaptErrors;
+
 /** A Standard Schema validation issue reported while encoding or decoding a Result payload. */
 export type ResultCodecIssue = StandardSchemaV1.Issue;
 

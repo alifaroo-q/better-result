@@ -614,7 +614,7 @@ describe("TaggedError", () => {
             type IsNever = [FallbackType] extends [never] ? true : false;
             const _proof: IsNever = true;
             void _proof;
-            return "unreachable";
+            return Result.ok("unreachable");
           },
         );
 
@@ -709,5 +709,194 @@ describe("UnhandledException", () => {
   it("handles null cause", () => {
     const error = new UnhandledException({ cause: null });
     expect(error.message).toBe("Unhandled exception: null");
+  });
+});
+
+describe("TaggedError.adapt", () => {
+  // Stand-ins for errors from a third-party package.
+  class ExternalNotFound extends Error {}
+  class ExternalRateLimited extends Error {
+    constructor(readonly retryAfter: number) {
+      super(`Retry after ${retryAfter}`);
+    }
+  }
+  class ExternalSpecificNotFound extends ExternalNotFound {}
+
+  class UserNotFoundError extends TaggedError("UserNotFoundError")<{ cause: unknown }> {}
+  class RateLimitError extends TaggedError("RateLimitError")<{
+    message: string;
+    cause: unknown;
+  }> {}
+  class EmptyPropsError extends TaggedError("EmptyPropsError")<{}> {}
+  class SpecificError extends TaggedError("SpecificError")<{ cause: unknown }> {}
+
+  const adapt = TaggedError.adapt(
+    [ExternalNotFound, UserNotFoundError],
+    [ExternalRateLimited, RateLimitError],
+  );
+
+  it("maps a matching error to its TaggedError", () => {
+    const external = new ExternalNotFound("user 42 missing");
+    const error = adapt(external);
+
+    expect(error).toBeInstanceOf(UserNotFoundError);
+    expect(error._tag).toBe("UserNotFoundError");
+    expect(TaggedError.is(error)).toBe(true);
+    expect(UserNotFoundError.is(error)).toBe(true);
+  });
+
+  it("keeps the original error as cause", () => {
+    const external = new ExternalNotFound("user 42 missing");
+    expect(adapt(external).cause).toBe(external);
+  });
+
+  it("copies the original message", () => {
+    expect(adapt(new ExternalNotFound("user 42 missing")).message).toBe("user 42 missing");
+    expect(adapt(new ExternalRateLimited(30)).message).toBe("Retry after 30");
+  });
+
+  it("appends the original stack", () => {
+    const external = new ExternalNotFound("user 42 missing");
+    const error = adapt(external);
+
+    expect(error.stack).toContain("Caused by:");
+    expect(error.stack).toContain("user 42 missing");
+  });
+
+  it("serializes the cause in toJSON", () => {
+    const external = new ExternalNotFound("user 42 missing");
+    const json = adapt(external).toJSON() as { cause: { message: string } };
+
+    expect(json.cause.message).toBe("user 42 missing");
+  });
+
+  it("picks the adapter that matches, not just the first one", () => {
+    expect(adapt(new ExternalRateLimited(30))).toBeInstanceOf(RateLimitError);
+  });
+
+  it("uses the first matching adapter when several match", () => {
+    const subclassFirst = TaggedError.adapt(
+      [ExternalSpecificNotFound, SpecificError],
+      [ExternalNotFound, UserNotFoundError],
+    );
+    const parentFirst = TaggedError.adapt(
+      [ExternalNotFound, UserNotFoundError],
+      [ExternalSpecificNotFound, SpecificError],
+    );
+    const external = new ExternalSpecificNotFound("specific");
+
+    expect(subclassFirst(external)).toBeInstanceOf(SpecificError);
+    expect(parentFirst(external)).toBeInstanceOf(UserNotFoundError);
+  });
+
+  it("matches subclasses of an adapted class", () => {
+    expect(adapt(new ExternalSpecificNotFound("sub"))).toBeInstanceOf(UserNotFoundError);
+  });
+
+  it("accepts target classes with empty props", () => {
+    const external = new ExternalNotFound("gone");
+    const error = TaggedError.adapt([ExternalNotFound, EmptyPropsError])(external);
+
+    expect(error).toBeInstanceOf(EmptyPropsError);
+    expect(error.message).toBe("gone");
+    expect(error.cause).toBe(external);
+  });
+
+  it("wraps an unmatched Error in UnhandledException", () => {
+    const external = new TypeError("boom");
+    const error = adapt(external);
+
+    expect(error).toBeInstanceOf(UnhandledException);
+    expect(error.cause).toBe(external);
+    expect(error.message).toBe("Unhandled exception: boom");
+  });
+
+  it("does not match a parent class to a subclass adapter", () => {
+    const onlySpecific = TaggedError.adapt([ExternalSpecificNotFound, SpecificError]);
+    expect(onlySpecific(new ExternalNotFound("parent"))).toBeInstanceOf(UnhandledException);
+  });
+
+  it.each([
+    ["a string", "boom"],
+    ["null", null],
+    ["undefined", undefined],
+    ["a number", 42],
+    ["a plain object with a message", { message: "not an Error" }],
+  ])("wraps %s in UnhandledException", (_label, thrown) => {
+    const error = adapt(thrown);
+
+    expect(error).toBeInstanceOf(UnhandledException);
+    expect(error.cause).toBe(thrown);
+  });
+
+  it("wraps an already tagged error in UnhandledException", () => {
+    const tagged = new UserNotFoundError({ cause: "x" });
+    const error = adapt(tagged);
+
+    expect(error).toBeInstanceOf(UnhandledException);
+    expect(error.cause).toBe(tagged);
+  });
+
+  it("maps a tagged error when it is listed as a source", () => {
+    const tagged = new EmptyPropsError();
+    const error = TaggedError.adapt([EmptyPropsError, UserNotFoundError])(tagged);
+
+    expect(error).toBeInstanceOf(UserNotFoundError);
+    expect(error.cause).toBe(tagged);
+  });
+
+  it("wraps everything in UnhandledException when given no adapters", () => {
+    const external = new ExternalNotFound("x");
+    expect(TaggedError.adapt()(external)).toBeInstanceOf(UnhandledException);
+  });
+
+  it("returns a new error on every call", () => {
+    const external = new ExternalNotFound("x");
+    expect(adapt(external) === adapt(external)).toBe(false);
+  });
+
+  it("works as the catch handler of Result.try", () => {
+    const external = new ExternalNotFound("sync");
+    const result = Result.try({
+      try: () => {
+        throw external;
+      },
+      catch: adapt,
+    });
+
+    expect(Result.isError(result)).toBe(true);
+    if (Result.isError(result)) {
+      expect(result.error).toBeInstanceOf(UserNotFoundError);
+      expect(result.error.cause).toBe(external);
+    }
+  });
+
+  it("works as the catch handler of Result.tryPromise", async () => {
+    const result = await Result.tryPromise({
+      try: () => Promise.reject(new ExternalRateLimited(5)),
+      catch: adapt,
+    });
+
+    expect(Result.isError(result)).toBe(true);
+    if (Result.isError(result)) {
+      expect(result.error).toBeInstanceOf(RateLimitError);
+    }
+  });
+
+  it("does not run on success", () => {
+    const result = Result.try({ try: () => 1, catch: adapt });
+    expect(Result.isOk(result)).toBe(true);
+  });
+
+  it("can be yielded in Result.gen after mapping", () => {
+    const result = Result.gen(function* () {
+      yield* adapt(new ExternalNotFound("gen"));
+      return Result.ok("unreachable");
+    });
+
+    expect(Result.isError(result)).toBe(true);
+    if (Result.isError(result)) {
+      expect(result.error).toBeInstanceOf(UserNotFoundError);
+    }
   });
 });
