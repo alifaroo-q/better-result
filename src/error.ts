@@ -304,7 +304,7 @@ const applyMatchErrorPartial = (
  * );
  */
 export function matchErrorPartial<
-  H extends Partial<MatchHandlers<TaggedErrorLike>>,
+  H extends Partial<MatchHandlers<E>>,
   F extends (error: UnhandledMatchErrors<E, H>) => unknown,
   E extends TaggedErrorLike = TaggedErrorLike,
 >(handlers: H, onUnhandled: F): PartialMatcher<H, F, E>;

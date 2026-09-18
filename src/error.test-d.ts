@@ -558,6 +558,14 @@ describe("matchErrorPartial", () => {
     expectTypeOf(outcome).toEqualTypeOf<"ErrorA" | string>();
   });
 
+  it("narrows pipeable handler parameters from mapError context", () => {
+    const getResult = (): Result<number, DetailedError | ErrorB> => Result.err(new ErrorB());
+    const mapped = getResult().mapError(
+      matchErrorPartial({ DetailedError: (e) => e.detail }, (e) => e._tag),
+    );
+    expectTypeOf(mapped).toEqualTypeOf<Result<number, string>>();
+  });
+
   it("narrows the pipeable onUnhandled parameter from mapError context", () => {
     const getResult = (): Result<number, ErrorA | ErrorB> => Result.err(new ErrorA());
     const mapped = getResult().mapError(
