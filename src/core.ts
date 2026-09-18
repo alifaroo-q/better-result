@@ -370,9 +370,10 @@ export class Ok<A, E = never> {
   /**
    * Pattern matches on Result.
    *
-   * @template T Return type.
+   * @template T Ok handler return type.
+   * @template U Err handler return type. Defaults to `T`.
    * @param handlers Ok and err handlers.
-   * @returns Result of ok handler.
+   * @returns Result of ok handler, typed as `T | U`.
    * @throws {Panic} If handler throws.
    *
    * @example
@@ -721,9 +722,10 @@ export class Err<T, E> {
   /**
    * Pattern matches on Result.
    *
-   * @template R Return type.
+   * @template U Ok handler return type.
+   * @template V Err handler return type. Defaults to `U`.
    * @param handlers Ok and err handlers.
-   * @returns Result of err handler.
+   * @returns Result of err handler, typed as `U | V`.
    * @throws {Panic} If handler throws.
    *
    * @example
