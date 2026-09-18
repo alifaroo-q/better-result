@@ -14,6 +14,7 @@ import {
   type CallbackSuccess,
   type InferErr,
   type InferOk,
+  type Matcher,
   type TapBothAsyncHandlers,
   type TapBothHandlers,
 } from "./core";
@@ -380,9 +381,9 @@ const andThenAsync: {
 );
 
 const match: {
-  <A, E, T>(handlers: { ok: (a: A) => T; err: (e: E) => T }): (result: Result<A, E>) => T;
-  <A, E, T>(result: Result<A, E>, handlers: { ok: (a: A) => T; err: (e: E) => T }): T;
-} = dual(2, <A, E, T>(result: Result<A, E>, handlers: { ok: (a: A) => T; err: (e: E) => T }): T => {
+  <A, E, T, U = T>(handlers: Matcher<A, E, T, U>): (result: Result<A, E>) => T | U;
+  <A, E, T, U = T>(result: Result<A, E>, handlers: Matcher<A, E, T, U>): T | U;
+} = dual(2, <A, E, T, U>(result: Result<A, E>, handlers: Matcher<A, E, T, U>): T | U => {
   return result.match(handlers);
 });
 

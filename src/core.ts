@@ -107,6 +107,11 @@ export type TapBothAsyncErrHandlers<E> = {
   err: (e: E) => Promise<void>;
 };
 
+export type Matcher<A, E, T, U = T> = {
+  ok: (a: A) => T;
+  err: (e: E) => U;
+};
+
 /** Detects whether a type is a union. */
 type IsUnion<T, U = T> = T extends unknown ? ([U] extends [T] ? false : true) : never;
 
@@ -373,12 +378,12 @@ export class Ok<A, E = never> {
    * @example
    * ok(2).match({ ok: x => x * 2, err: () => 0 }) // 4
    */
-  match<T>(this: Ok<A, E>, handlers: { ok: (a: A) => T; err: (e: never) => T }): T;
-  match<T, R extends AnyResult = Result<A, E>>(
+  match<T, U = T>(this: Ok<A, E>, handlers: Matcher<A, never, T, U>): T | U;
+  match<T, U = T, R extends AnyResult = Result<A, E>>(
     this: R,
-    handlers: { ok: (a: InferOk<R>) => T; err: (e: InferErr<R>) => T },
-  ): T;
-  match<T>(handlers: { ok: (a: A) => T; err: (e: never) => T }): T {
+    handlers: Matcher<InferOk<R>, InferErr<R>, T, U>,
+  ): T | U;
+  match<T>(handlers: Matcher<A, never, T, unknown>): T {
     return tryOrPanic(() => handlers.ok(this.value), "match ok handler threw");
   }
 
@@ -724,12 +729,12 @@ export class Err<T, E> {
    * @example
    * err("fail").match({ ok: x => x, err: e => e.length }) // 4
    */
-  match<U>(this: Err<T, E>, handlers: { ok: (a: never) => U; err: (e: E) => U }): U;
-  match<U, R extends AnyResult = Result<T, E>>(
+  match<U, V = U>(this: Err<T, E>, handlers: Matcher<never, E, U, V>): U | V;
+  match<U, V = U, R extends AnyResult = Result<T, E>>(
     this: R,
-    handlers: { ok: (a: InferOk<R>) => U; err: (e: InferErr<R>) => U },
-  ): U;
-  match<R>(handlers: { ok: (a: never) => R; err: (e: E) => R }): R {
+    handlers: Matcher<InferOk<R>, InferErr<R>, U, V>,
+  ): U | V;
+  match<V>(handlers: Matcher<never, E, unknown, V>): V {
     return tryOrPanic(() => handlers.err(this.error), "match err handler threw");
   }
 
