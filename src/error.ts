@@ -208,6 +208,15 @@ type UnhandledReturn<F, E extends TaggedErrorLike, H> =
       ? R
       : never;
 
+/** Handlers for explicit `<E, R>` (H omitted, stays `never`) or `<E, R, H>` type arguments. */
+type ExplicitHandlers<E extends TaggedErrorLike, R, H> = [H] extends [never]
+  ? PartialMatchHandlers<E, R>
+  : H;
+/** Unhandled variants: all of E when H is omitted, since TS cannot infer it next to explicit E, R. */
+type ExplicitUnhandled<E extends TaggedErrorLike, H> = [H] extends [never]
+  ? E
+  : UnhandledMatchErrors<E, H>;
+
 /** Argument error naming the variants that neither the handlers nor onUnhandled accept. */
 type UncoveredUnhandledErrors<Missing> = { readonly "onUnhandled does not accept": Missing };
 
@@ -318,17 +327,15 @@ export function matchErrorPartial<
     ? E
     : UncoveredUnhandledErrors<Exclude<UnhandledMatchErrors<E, H>, U>>,
 ) => MatchReturn<H> | R;
-/** Pipeable with explicit E, R; onUnhandled receives the full E (handled tags are unknown) */
-export function matchErrorPartial<E extends TaggedErrorLike, R>(
-  handlers: PartialMatchHandlers<E, R>,
-  onUnhandled: (error: E) => R,
-): (error: E) => R;
-/** Pipeable with exact H; onUnhandled receives only the unhandled variants */
+/** Pipeable with explicit E, R (fallback gets all of E) or E, R, H (fallback gets unhandled variants) */
 export function matchErrorPartial<
   E extends TaggedErrorLike,
   R,
-  const H extends PartialMatchHandlers<E, R>,
->(handlers: H, onUnhandled: (error: UnhandledMatchErrors<E, H>) => R): (error: E) => R;
+  const H extends PartialMatchHandlers<E, R> = never,
+>(
+  handlers: ExplicitHandlers<E, R, H>,
+  onUnhandled: (error: ExplicitUnhandled<E, H>) => R,
+): (error: E) => R;
 /** Pipeable with identity onUnhandled behavior — E is deferred until application */
 export function matchErrorPartial<const H extends Partial<MatchHandlers<TaggedErrorLike>>>(
   handlers: H,
@@ -337,32 +344,23 @@ export function matchErrorPartial<const H extends Partial<MatchHandlers<TaggedEr
 export function matchErrorPartial<const H extends AnnotatedMatchHandlers>(
   handlers: H & ValidateAnnotatedMatchHandlers<H>,
 ): <E extends TaggedErrorLike>(err: E) => MatchReturn<H> | UnhandledMatchErrors<E, H>;
-/** Pipeable with explicit E, R and identity onUnhandled behavior; E remains conservative */
-export function matchErrorPartial<E extends TaggedErrorLike, R>(
-  handlers: PartialMatchHandlers<E, R>,
-): (err: E) => R | E;
-/** Pipeable with exact H and identity onUnhandled behavior; handled variants are excluded */
+/** Pipeable with explicit E, R (returns all of E) or E, R, H (returns unhandled variants) */
 export function matchErrorPartial<
   E extends TaggedErrorLike,
   R,
-  const H extends PartialMatchHandlers<E, R>,
->(handlers: H): (err: E) => R | UnhandledMatchErrors<E, H>;
+  const H extends PartialMatchHandlers<E, R> = never,
+>(handlers: ExplicitHandlers<E, R, H>): (err: E) => R | ExplicitUnhandled<E, H>;
 /** Data-first with identity onUnhandled behavior; returns results or unhandled variants */
 export function matchErrorPartial<
   E extends TaggedErrorLike,
   const H extends Partial<MatchHandlers<E>>,
 >(err: E, handlers: H): MatchReturn<H> | UnhandledMatchErrors<E, H>;
-/** Data-first with explicit E, R and identity onUnhandled behavior; E remains conservative */
-export function matchErrorPartial<E extends TaggedErrorLike, R>(
-  err: E,
-  handlers: PartialMatchHandlers<E, R>,
-): R | E;
-/** Data-first with exact H and identity onUnhandled behavior; handled variants are excluded */
+/** Data-first with explicit E, R or E, R, H and identity onUnhandled behavior */
 export function matchErrorPartial<
   E extends TaggedErrorLike,
   R,
-  const H extends PartialMatchHandlers<E, R>,
->(err: E, handlers: H): R | UnhandledMatchErrors<E, H>;
+  const H extends PartialMatchHandlers<E, R> = never,
+>(err: E, handlers: ExplicitHandlers<E, R, H>): R | ExplicitUnhandled<E, H>;
 /** Data-first with inference — E from error, H from handlers, R from onUnhandled */
 export function matchErrorPartial<
   E extends TaggedErrorLike,
@@ -373,18 +371,16 @@ export function matchErrorPartial<
   handlers: H,
   onUnhandled: (error: Exclude<E, { _tag: NoInfer<HandledTags<E, H>> }>) => R,
 ): MatchReturn<H> | R;
-/** Data-first with explicit E, R; onUnhandled receives the full E (handled tags are unknown) */
-export function matchErrorPartial<E extends TaggedErrorLike, R>(
-  error: E,
-  handlers: PartialMatchHandlers<E, R>,
-  onUnhandled: (error: E) => R,
-): R;
-/** Data-first with exact H; onUnhandled receives only the unhandled variants */
+/** Data-first with explicit E, R or E, R, H; see the pipeable form */
 export function matchErrorPartial<
   E extends TaggedErrorLike,
   R,
-  const H extends PartialMatchHandlers<E, R>,
->(error: E, handlers: H, onUnhandled: (error: UnhandledMatchErrors<E, H>) => R): R;
+  const H extends PartialMatchHandlers<E, R> = never,
+>(
+  error: E,
+  handlers: ExplicitHandlers<E, R, H>,
+  onUnhandled: (error: ExplicitUnhandled<E, H>) => R,
+): R;
 export function matchErrorPartial(
   errorOrHandlers: TaggedErrorLike | Partial<MatchHandlers<TaggedErrorLike>>,
   handlersOrOnUnhandled?:
