@@ -218,6 +218,9 @@ type UnhandledReturn<F, E extends TaggedErrorLike, H> =
       ? R
       : never;
 
+/** Argument error naming the variants that neither the handlers nor onUnhandled accept. */
+type UncoveredUnhandledErrors<Missing> = { readonly "onUnhandled does not accept": Missing };
+
 /**
  * Pipeable matcher. E comes from the contextual callback type (e.g. mapError, tryRecover). Without
  * context E stays `TaggedErrorLike`, and the matcher stays generic so `Result.err` can still narrow
@@ -321,7 +324,9 @@ export function matchErrorPartial<
   handlers: H & ValidateAnnotatedMatchHandlers<H>,
   onUnhandled: (error: U) => R,
 ): <E extends TaggedErrorLike>(
-  error: [UnhandledMatchErrors<E, H>] extends [U] ? E : never,
+  error: [UnhandledMatchErrors<E, H>] extends [U]
+    ? E
+    : UncoveredUnhandledErrors<Exclude<UnhandledMatchErrors<E, H>, U>>,
 ) => MatchReturn<H> | R;
 /** Pipeable with explicit E, R; onUnhandled receives the full E (handled tags are unknown) */
 export function matchErrorPartial<E extends TaggedErrorLike, R>(
