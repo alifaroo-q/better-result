@@ -197,6 +197,19 @@ type HandledTags<E extends TaggedErrorLike, H> = Extract<keyof H, E["_tag"]>;
 type UnhandledMatchErrors<E extends TaggedErrorLike, H> = Exclude<E, { _tag: HandledTags<E, H> }>;
 
 /**
+ * Pipeable onUnhandled callback. One contextual type for every pipeable overload, so a failed
+ * overload cannot leave a different parameter type on the callback.
+ */
+type UnhandledCallback = (error: TaggedErrorLike) => unknown;
+
+/** Callback result; `Result.err` keeps the precise unhandled variants once E is known. */
+type UnhandledReturn<F, E extends TaggedErrorLike, H> = F extends typeof err
+  ? Err<never, UnhandledMatchErrors<E, H>>
+  : F extends (error: never) => infer R
+    ? R
+    : never;
+
+/**
  * Exhaustive pattern match on tagged error union.
  *
  * @example
@@ -270,15 +283,21 @@ const applyMatchErrorPartial = (
  *   (e) => `Unknown: ${e.message}`,
  * );
  */
-export function matchErrorPartial<const H extends AnnotatedMatchHandlers>(
-  handlers: H & ValidateAnnotatedMatchHandlers<H>,
-  onUnhandled: typeof err,
-): <E extends TaggedErrorLike>(error: E) => MatchReturn<H> | Err<never, UnhandledMatchErrors<E, H>>;
-/** Pipeable with a general onUnhandled callback while deferring E until application. */
-export function matchErrorPartial<H extends Partial<MatchHandlers<TaggedErrorLike>>, R>(
+export function matchErrorPartial<
+  H extends Partial<MatchHandlers<TaggedErrorLike>>,
+  F extends UnhandledCallback,
+>(
   handlers: H,
-  onUnhandled: (error: TaggedErrorLike) => R,
-): <E extends TaggedErrorLike>(error: E) => MatchReturn<H> | R;
+  onUnhandled: F,
+): <E extends TaggedErrorLike>(error: E) => MatchReturn<H> | UnhandledReturn<F, E, H>;
+/** Pipeable with annotated handler parameters and an onUnhandled callback */
+export function matchErrorPartial<
+  const H extends AnnotatedMatchHandlers,
+  F extends UnhandledCallback,
+>(
+  handlers: H & ValidateAnnotatedMatchHandlers<H>,
+  onUnhandled: F,
+): <E extends TaggedErrorLike>(error: E) => MatchReturn<H> | UnhandledReturn<F, E, H>;
 /** Pipeable with explicit E, R — H inferred via default, onUnhandled narrowed */
 export function matchErrorPartial<
   E extends TaggedErrorLike,

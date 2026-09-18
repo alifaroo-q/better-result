@@ -512,6 +512,21 @@ describe("matchErrorPartial", () => {
     expectTypeOf(outcome).toEqualTypeOf<"A" | "onUnhandled">();
   });
 
+  it("types the pipeable onUnhandled parameter when handlers take no parameter", () => {
+    const matcher = matchErrorPartial({ ErrorA: () => "A" as const }, (e) => e.message);
+    const outcome = matcher(Result.err<void, ErrorA | ErrorB>(new ErrorA()).error);
+    expectTypeOf(outcome).toEqualTypeOf<"A" | string>();
+  });
+
+  it("types the pipeable onUnhandled parameter when handlers are annotated", () => {
+    const matcher = matchErrorPartial(
+      { ErrorA: (handled: ErrorA) => handled._tag },
+      (e) => e.message,
+    );
+    const outcome = matcher(Result.err<void, ErrorA | ErrorB>(new ErrorA()).error);
+    expectTypeOf(outcome).toEqualTypeOf<"ErrorA" | string>();
+  });
+
   it("preserves unhandled errors when the pipeable onUnhandled callback is Result.err", () => {
     type ApiError = ErrorA | ErrorB | ErrorC;
     const getError = (): ApiError => new ErrorA();
