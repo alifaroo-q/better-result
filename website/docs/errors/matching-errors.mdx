@@ -88,6 +88,26 @@ const message = matchErrorPartial(
 );
 ```
 
+In the pipeable form, the fallback gets the unhandled variants when the error type comes from context, such as `mapError` or `tryRecover`:
+
+```ts
+const mapped = result.mapError(
+  matchErrorPartial(
+    { UserNotFound: (error: UserNotFound) => `No user ${error.userId}` },
+    (unhandled) => `Denied: ${unhandled.permission}`, // unhandled: PermissionDenied
+  ),
+);
+```
+
+Without context, annotate the fallback parameter. The matcher then only accepts errors that the handlers or the fallback cover:
+
+```ts
+const toMessage = matchErrorPartial(
+  { UserNotFound: (error: UserNotFound) => `No user ${error.userId}` },
+  (unhandled: PermissionDenied) => `Denied: ${unhandled.permission}`,
+);
+```
+
 ## Recover selected variants
 
 Pass `Result.err` as the fallback to preserve unhandled variants while recovering one:

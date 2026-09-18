@@ -196,18 +196,21 @@ type HandledTags<E extends TaggedErrorLike, H> = Extract<keyof H, E["_tag"]>;
 /** Error variants not selected by a partial handler map. */
 type UnhandledMatchErrors<E extends TaggedErrorLike, H> = Exclude<E, { _tag: HandledTags<E, H> }>;
 
-/**
- * Pipeable onUnhandled callback. One contextual type for every pipeable overload, so a failed
- * overload cannot leave a different parameter type on the callback.
- */
-type UnhandledCallback = (error: TaggedErrorLike) => unknown;
-
 /** Callback result; `Result.err` keeps the precise unhandled variants once E is known. */
 type UnhandledReturn<F, E extends TaggedErrorLike, H> = F extends typeof err
   ? Err<never, UnhandledMatchErrors<E, H>>
   : F extends (error: never) => infer R
     ? R
     : never;
+
+/**
+ * Pipeable matcher. E comes from the contextual callback type (e.g. mapError, tryRecover). Without
+ * context E stays `TaggedErrorLike`, and the matcher stays generic so `Result.err` can still narrow
+ * the unhandled variants when it is applied.
+ */
+type PartialMatcher<H, F, E extends TaggedErrorLike> = TaggedErrorLike extends E
+  ? <E2 extends TaggedErrorLike>(error: E2) => MatchReturn<H> | UnhandledReturn<F, E2, H>
+  : (error: E) => MatchReturn<H> | UnhandledReturn<F, E, H>;
 
 /**
  * Exhaustive pattern match on tagged error union.
@@ -285,19 +288,26 @@ const applyMatchErrorPartial = (
  */
 export function matchErrorPartial<
   H extends Partial<MatchHandlers<TaggedErrorLike>>,
-  F extends UnhandledCallback,
->(
-  handlers: H,
-  onUnhandled: F,
-): <E extends TaggedErrorLike>(error: E) => MatchReturn<H> | UnhandledReturn<F, E, H>;
+  F extends (error: UnhandledMatchErrors<E, H>) => unknown,
+  E extends TaggedErrorLike = TaggedErrorLike,
+>(handlers: H, onUnhandled: F): PartialMatcher<H, F, E>;
 /** Pipeable with annotated handler parameters and an onUnhandled callback */
 export function matchErrorPartial<
   const H extends AnnotatedMatchHandlers,
-  F extends UnhandledCallback,
+  F extends (error: UnhandledMatchErrors<E, H>) => unknown,
+  E extends TaggedErrorLike = TaggedErrorLike,
+>(handlers: H & ValidateAnnotatedMatchHandlers<H>, onUnhandled: F): PartialMatcher<H, F, E>;
+/** Pipeable with an annotated onUnhandled parameter; it must accept every unhandled variant */
+export function matchErrorPartial<
+  const H extends AnnotatedMatchHandlers,
+  U extends TaggedErrorLike,
+  R,
 >(
   handlers: H & ValidateAnnotatedMatchHandlers<H>,
-  onUnhandled: F,
-): <E extends TaggedErrorLike>(error: E) => MatchReturn<H> | UnhandledReturn<F, E, H>;
+  onUnhandled: (error: U) => R,
+): <E extends TaggedErrorLike>(
+  error: [UnhandledMatchErrors<E, H>] extends [U] ? E : never,
+) => MatchReturn<H> | R;
 /** Pipeable with explicit E, R; onUnhandled receives the full E (handled tags are unknown) */
 export function matchErrorPartial<E extends TaggedErrorLike, R>(
   handlers: PartialMatchHandlers<E, R>,

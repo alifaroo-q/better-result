@@ -558,6 +558,37 @@ describe("matchErrorPartial", () => {
     expectTypeOf(outcome).toEqualTypeOf<"ErrorA" | string>();
   });
 
+  it("narrows the pipeable onUnhandled parameter from mapError context", () => {
+    const getResult = (): Result<number, ErrorA | ErrorB> => Result.err(new ErrorA());
+    const mapped = getResult().mapError(
+      matchErrorPartial({ ErrorA: () => "A" as const }, (e) => {
+        expectTypeOf(e).toEqualTypeOf<ErrorB>();
+        return e._tag;
+      }),
+    );
+    expectTypeOf(mapped).toEqualTypeOf<Result<number, "A" | "ErrorB">>();
+  });
+
+  it("narrows a pipeable onUnhandled callback that wraps Result.err inside tryRecover", () => {
+    const getResult = (): Result<string, ErrorA | ErrorB> => Result.err(new ErrorA());
+    const recovered = getResult().tryRecover(
+      matchErrorPartial({ ErrorA: () => Result.ok(1) }, (e) => Result.err(e)),
+    );
+    expectTypeOf(recovered).toEqualTypeOf<Result<string | number, ErrorB>>();
+  });
+
+  it("accepts an annotated pipeable onUnhandled parameter (issue #110)", () => {
+    const matcher = matchErrorPartial({ ErrorA: () => "A" as const }, (e: ErrorB) => e._tag);
+    const outcome = matcher(Result.err<void, ErrorA | ErrorB>(new ErrorA()).error);
+    expectTypeOf(outcome).toEqualTypeOf<"A" | "ErrorB">();
+  });
+
+  it("rejects errors an annotated pipeable onUnhandled parameter does not cover", () => {
+    const matcher = matchErrorPartial({ ErrorA: () => "A" }, (e: ErrorB) => e._tag);
+    // @ts-expect-error - ErrorC is neither handled nor accepted by onUnhandled
+    matcher(Result.err<void, ErrorA | ErrorB | ErrorC>(new ErrorA()).error);
+  });
+
   it("preserves unhandled errors when the pipeable onUnhandled callback is Result.err", () => {
     type ApiError = ErrorA | ErrorB | ErrorC;
     const getError = (): ApiError => new ErrorA();
