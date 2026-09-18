@@ -589,6 +589,20 @@ describe("matchErrorPartial", () => {
     matcher(Result.err<void, ErrorA | ErrorB | ErrorC>(new ErrorA()).error);
   });
 
+  it("does not treat other functions assignable to Result.err as Result.err", () => {
+    const error = Result.err<void, ErrorA | ErrorB>(new ErrorA()).error;
+    const rethrow = (e: unknown): never => {
+      throw e;
+    };
+    // oxlint-disable-next-line typescript/no-explicit-any -- checks an any-returning fallback
+    const loose = (e: unknown): any => e;
+
+    expectTypeOf(
+      matchErrorPartial({ ErrorA: () => "A" as const }, rethrow)(error),
+    ).toEqualTypeOf<"A">();
+    expectTypeOf(matchErrorPartial({ ErrorA: () => "A" as const }, loose)(error)).toBeAny();
+  });
+
   it("preserves unhandled errors when the pipeable onUnhandled callback is Result.err", () => {
     type ApiError = ErrorA | ErrorB | ErrorC;
     const getError = (): ApiError => new ErrorA();

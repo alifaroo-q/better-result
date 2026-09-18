@@ -196,12 +196,27 @@ type HandledTags<E extends TaggedErrorLike, H> = Extract<keyof H, E["_tag"]>;
 /** Error variants not selected by a partial handler map. */
 type UnhandledMatchErrors<E extends TaggedErrorLike, H> = Exclude<E, { _tag: HandledTags<E, H> }>;
 
+/**
+ * True only for `Result.err` itself: assignable both ways and not returning `any`. Looser checks
+ * also match callbacks like `(e: unknown) => never`, which would then claim to return `Err`.
+ */
+type IsErrCallback<F> = [F] extends [typeof err]
+  ? [typeof err] extends [F]
+    ? F extends (error: never) => infer R
+      ? 0 extends 1 & R
+        ? false
+        : true
+      : false
+    : false
+  : false;
+
 /** Callback result; `Result.err` keeps the precise unhandled variants once E is known. */
-type UnhandledReturn<F, E extends TaggedErrorLike, H> = F extends typeof err
-  ? Err<never, UnhandledMatchErrors<E, H>>
-  : F extends (error: never) => infer R
-    ? R
-    : never;
+type UnhandledReturn<F, E extends TaggedErrorLike, H> =
+  IsErrCallback<F> extends true
+    ? Err<never, UnhandledMatchErrors<E, H>>
+    : F extends (error: never) => infer R
+      ? R
+      : never;
 
 /**
  * Pipeable matcher. E comes from the contextual callback type (e.g. mapError, tryRecover). Without
