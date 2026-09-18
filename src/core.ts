@@ -380,7 +380,7 @@ export class Ok<A, E = never> {
    * ok(2).match({ ok: x => x * 2, err: () => 0 }) // 4
    */
   match<T, U = T>(this: Ok<A, E>, handlers: Matcher<A, never, T, U>): T | U;
-  match<T, U = T, R extends AnyResult = Result<A, E>>(
+  match<T, R extends AnyResult = Result<A, E>, U = T>(
     this: R,
     handlers: Matcher<InferOk<R>, InferErr<R>, T, U>,
   ): T | U;
@@ -732,7 +732,7 @@ export class Err<T, E> {
    * err("fail").match({ ok: x => x, err: e => e.length }) // 4
    */
   match<U, V = U>(this: Err<T, E>, handlers: Matcher<never, E, U, V>): U | V;
-  match<U, V = U, R extends AnyResult = Result<T, E>>(
+  match<U, R extends AnyResult = Result<T, E>, V = U>(
     this: R,
     handlers: Matcher<InferOk<R>, InferErr<R>, U, V>,
   ): U | V;

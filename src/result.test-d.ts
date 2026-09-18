@@ -38,6 +38,15 @@ describe("Result.match", () => {
     expectTypeOf(dataLast).toEqualTypeOf<number | string>();
   });
 
+  it("keeps the explicit <T, R> type argument positions", () => {
+    const outcome = result.match<string, Result<string, Error>>({
+      ok: (value) => value,
+      err: (error) => error.message,
+    });
+
+    expectTypeOf(outcome).toEqualTypeOf<string>();
+  });
+
   it("keeps distinct typed responses per branch", () => {
     const outcome = result.match({
       ok: (value) => json({ data: value }),
